@@ -9,3 +9,5 @@ spark-warehouse
 dist
 build
 *.sublime*
+.DS_Store
+*.csv
