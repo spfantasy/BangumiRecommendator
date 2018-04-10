@@ -6,3 +6,7 @@ class IndexExceedError(Exception):
 class SubjectBlockedError(Exception):
     def __init__(self, url):
         self.message = url
+
+class ContentFormatError(Exception):
+    def __init__(self, url):
+        self.message = url

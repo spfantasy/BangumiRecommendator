@@ -1,7 +1,12 @@
-from errors import IndexExceedError, SubjectBlockedError
+# import os.path
+# import sys
+# sys.path.append(os.path.join(os.path.dirname(
+#     os.path.realpath(__file__)), os.pardir))
+from errors import IndexExceedError, SubjectBlockedError, ContentFormatError
 import requests
 import re
-
+#判定是不是想要的页面
+#127卡住，queue缩短的bug
 
 class TaskNode:
     def __init__(self, url, crawler):
@@ -22,13 +27,18 @@ class TaskNode:
             res = requests.get(self.url, timeout=10)
             res.encoding = 'utf-8'
         except Exception as e:
-            self.fail(e)
+            self.fail(e(self.url))
         else:
             self._recorder(res.text)
-        return self
+        finally:
+            self.done()
+            return self
 
     def done(self):
         self.status = "D"
+        with self.crawler._lock:
+            self.crawler._running.remove(self)
+        self.crawler._addthread()
         return self
 
     def fail(self, e):
@@ -48,7 +58,7 @@ class TaskNode:
 
 class AnimeTaskNode(TaskNode):
     def __init__(self, url, crawler):
-        super().__init__(self, url, crawler)
+        super().__init__(url, crawler)
 
     def _recorder(self, text):
         if self.indexExceeded(text):
@@ -57,9 +67,13 @@ class AnimeTaskNode(TaskNode):
             self.crawler._errors.append(SubjectBlockedError(self.url))
             self.crawler._enqueue(self.crawler.gettask())
         else:
-            page = self.getcontent(text)
-            self._saver(page)
-            self.crawler._enqueue(self.crawler.gettask())
+            try:
+                page = self.getcontent(text)
+                self._saver(page)
+            except:
+                self.crawler._errors.append(ContentFormatError(self.url))
+            finally:
+                self.crawler._enqueue(self.crawler.gettask())
 
     def getcontent(text):
         page = {}
@@ -86,7 +100,7 @@ class AnimeTaskNode(TaskNode):
             val = remove_tag_a(val)
             page[key] = val
 
-        page["id"] = self.url
+        page["id"] = self.url.strip('./').split('/')[-1]
         page["nameJP"] = soup.find('title').contents[0].split('|')[
             0].strip(" :：、")
         page["averageRating"] = soup.find(
@@ -108,4 +122,27 @@ class AnimeTaskNode(TaskNode):
             return False
 
     def _saver(self, page):
-        print("This is a method that need to be overwrite")
+        print(1)
+        fieldnames = [
+            "id",
+            "episode",
+            "name",
+            "nameEN",
+            "nameJP",
+            "releaseDate",
+            "averageRating",
+            "popularity",
+            "imageURL",
+        ]
+        writer = csv.DictWriter(csv_handle, fieldnames=fieldnames)
+        writer.writerow({
+            "id": page["id"],
+            "episode": page["话数"],
+            "name": page["中文名"],
+            "nameEN": page["nameEN"],
+            "nameJP": page["nameJP"],
+            "releaseDate": page["放送开始"],
+            "averageRating": page["averageRating"],
+            "popularity": page["popularity"],
+            "imageURL": page["imageURL"],
+        })
